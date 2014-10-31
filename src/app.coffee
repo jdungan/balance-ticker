@@ -34,6 +34,12 @@ sparkline = (g, data) ->
 build = (data)->
     console.log(data.contents.data)
     
+    # total =
+    #   name: "ALL"
+    #   y: [_.reduce(data.contents.data,  (memo, num)-> memo + _.last num.y , 0)]
+    #
+    # data.contents.data.unshift total
+    
     media_li = d3.select('#programs')
       .selectAll('li')
       .data(data.contents.data)
@@ -62,7 +68,6 @@ build = (data)->
             .attr('height', height)
             .append('g')
               .attr('transform', 'translate(0, 2)');
-
         sparkline svg, points
         
         body = media .append('div')
@@ -72,12 +77,17 @@ build = (data)->
           .text( (d,i)-> d.name )
         body.append('p')
           .text (d,i)-> 
-            sum=_.reduce calls,_sum, 0 
-            "TOTAL CALLS: "+sum  
+            "TOTAL CALLS: "+ _.last(d.y)  
         body.append('p')
           .text (d,i)-> 
-            sum= _.reduce calls , _sum , 0
+            sum= _.last(d.y)
             "DAILY AVG: " +  ExtMath.truncate sum / d.y.length,2
+        body.append('p')
+          .text (d,i)-> 
+            lasttwo=_.last(calls,2)
+            diff= lasttwo[1]? - lasttwo[0]?=0
+            "CHG: " +  diff
+
 
 
 $(document).ready ->
