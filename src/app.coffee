@@ -9,7 +9,7 @@ _sum = (memo, num) -> memo + num
 
 # sparkline adapted from http://www.tnoda.com/blog/2013-12-19
 width = 96
-height = 48
+height = 64
 x = d3.scale.linear().range([0, width - 2])
 y = d3.scale.linear().range([height - 4, 0])
 parseDate = d3.time.format("%Y-%m-%d").parse
@@ -31,14 +31,29 @@ sparkline = (g, data) ->
     .attr('cy', -> y( _.last(data)[1] ) )
     .attr('r', 1.5)
 
+
+class Summary
+  constructor:->  
+    @calls=[]
+    @dates=[]
+  add: (points)->
+    iter = (e,i,l)->
+      date_pos = _.sortedIndex(@dates,e[0])
+      date = @dates[date_pos] ? 0
+      if e[0].valueOf() isnt date.valueOf()
+        @dates= _.first(@dates,date_pos).concat  [e[0]] , _.rest(@dates,date_pos)
+        @calls= _.first(@calls,date_pos).concat  [0] , _.rest(@calls,date_pos)
+      @calls[date_pos]  += e[1]
+
+    _.each points,iter,@
+
+  points: ->    
+    _.zip @dates,@calls
+
+all_states= new Summary        
+
 build = (data)->
-    console.log(data.contents.data)
-    
-    # total =
-    #   name: "ALL"
-    #   y: [_.reduce(data.contents.data,  (memo, num)-> memo + _.last num.y , 0)]
-    #
-    # data.contents.data.unshift total
+    console.log(data)
     
     media_li = d3.select('#programs')
       .selectAll('li')
@@ -48,13 +63,14 @@ build = (data)->
         .classed("list-group-item",true)
       .append("div")
         .classed("media",true)
-          
+
     media_li 
       .each (d,i)->
-
-        dates = _.map(d.x, (d) -> parseDate d )
+        dates = _.map(d.x, (v,i,l) -> parseDate v ) 
         calls = _.map(d.y, (v,i,l) -> v-l[i-1]?=0 )  
         points = _.zip(dates,calls)
+        all_states.add points
+
         x.domain d3.extent dates 
         y.domain d3.extent calls  
 
@@ -68,6 +84,7 @@ build = (data)->
             .attr('height', height)
             .append('g')
               .attr('transform', 'translate(0, 2)');
+
         sparkline svg, points
         
         body = media .append('div')
@@ -88,7 +105,44 @@ build = (data)->
             diff= lasttwo[1]? - lasttwo[0]?=0
             "CHG: " +  diff
 
+    total_li = d3.select("#total")
+      .append("li")
+        .classed("list-group-item",true)
+      .append("div")
+        .classed("media",true)
+      
+    x.domain d3.extent all_states.dates 
+    y.domain d3.extent all_states.calls  
 
+    svg = total_li .append("div")
+      .classed("pull-left",true)
+      .append('svg')
+        .classed("media-object",true)
+        .attr('width', width)
+        .attr('height', height)
+        .append('g')
+          .attr('transform', 'translate(0, 2)');
+
+      
+    sparkline svg, all_states.points()
+    sum=_.reduce(all_states.calls, _sum) 
+    
+    body = total_li.append('div')
+      .classed("media-body",true)
+    body.append('h4')
+      .classed("media-heading",true)
+      .text( "ALL" )
+    body.append('p')
+      .text (d,i)->
+        "TOTAL CALLS: "+ sum
+    body.append('p')
+      .text (d,i)-> 
+        "DAILY AVG: " +  ExtMath.truncate sum / all_states.calls.length,2
+    body.append('p')
+      .text (d,i)-> 
+        lasttwo=_.last(all_states.calls,2)
+        diff= lasttwo[1]? - lasttwo[0]?=0
+        "CHG: " +  diff
 
 $(document).ready ->
   data_url ='http://whateverorigin.org/get?url=' + encodeURIComponent('https://plot.ly/~lippytak/184/balance-metrics-checks.json') + '&callback=?' 
