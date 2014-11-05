@@ -47,8 +47,10 @@ class Summary
 
     _.each points,iter,@
 
-  points: ->    
-    _.zip @dates,@calls
+  points: ->
+    #drop last, possibly incomplete day
+    all_days = _.zip @dates,@calls
+    _.first(all_days,all_days.length-1)
 
 all_states= new Summary        
 
@@ -122,9 +124,10 @@ build = (data)->
         .attr('height', height)
         .append('g')
           .attr('transform', 'translate(0, 2)');
-
       
-    sparkline svg, all_states.points()
+    full_days = all_states.points()
+    sparkline svg, full_days 
+    
     sum=_.reduce(all_states.calls, _sum) 
     
     body = total_li.append('div')
