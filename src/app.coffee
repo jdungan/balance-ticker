@@ -5,8 +5,6 @@ class ExtMath extends Math
     scale = scales[precision]
     Math.round(x * scale) / scale
 
-_sum = (memo, num) -> memo + num
-
 # sparkline adapted from http://www.tnoda.com/blog/2013-12-19
 width = 96
 height = 64
@@ -19,23 +17,39 @@ line = d3.svg.line()
   .x( (d) -> x( d[0] ) )
   .y( (d) -> y( d[1] ) )
 
-sparkline = (g, data) -> 
-  g.append('path')
-    .datum(data)
-    .classed('sparkline',true)
-    .attr('d', line)
+sparkline = (g, data) ->
+  
+  if data.length > 0
+    g.append('path')
+      .datum(data)
+      .classed('sparkline',true)
+      .attr('d', line)
 
-  g.append('circle')
-    .classed('sparkcircle',true)
-    .attr('cx', -> x( _.last(data)[0] ) )
-    .attr('cy', -> y( _.last(data)[1] ) )
-    .attr('r', 1.5)
+    g.append('circle')
+      .classed('sparkcircle',true)
+      .attr('cx', -> x( _.last(data)[0] ) )
+      .attr('cy', -> y( _.last(data)[1] ) )
+      .attr('r', 1.5)
 
+DateUtil = (JSdate,type)->
+  if JSdate
+    switch type
+      when "M/D" then (JSdate.getMonth() + 1) + "/" + JSdate.getDate()
 
 class Summary
-  constructor:->  
+  constructor:->
+    @name =""  
     @calls=[]
     @dates=[]
+  sum : ->
+    if @calls.length > 0
+      _.reduce @calls,(memo, num) -> memo + num
+    else
+      0
+  max : -> _.reduce @calls,(m,n)-> if n>m then n else m
+  min : -> _.reduce @calls,(m,n)-> if n<m then n else m
+  avg : -> ExtMath.truncate @sum() / @calls.length,1
+    
   add: (points)->
     iter = (e,i,l)->
       date_pos = _.sortedIndex(@dates,e[0])
@@ -44,22 +58,33 @@ class Summary
         @dates= _.first(@dates,date_pos).concat  [e[0]] , _.rest(@dates,date_pos)
         @calls= _.first(@calls,date_pos).concat  [0] , _.rest(@calls,date_pos)
       @calls[date_pos]  += e[1]
-
     _.each points,iter,@
-
   points: ->
-    #drop last, possibly incomplete day
-    all_days = _.zip @dates,@calls
-    _.first(all_days,all_days.length-1)
+    _.zip @dates,@calls
 
-all_states= new Summary        
+
 
 build = (data)->
     console.log(data)
+    total_calls= new Summary        
+    total_calls.name ="ALL"
+    
+    display = _.map(data.contents.data,
+      (v,i,l)->
+        dates = _.map(v.x, (v,i,l) -> parseDate v ) 
+        calls = _.map(v.y, (v,i,l) -> v-l[i-1]?=0 )  
+        this_state = new Summary
+        this_state.name = v.name
+        this_state.add(_.zip(dates,calls))              
+        total_calls.add this_state.points()
+        this_state
+    )
+    
+    display.unshift total_calls
     
     media_li = d3.select('#programs')
       .selectAll('li')
-      .data(data.contents.data)
+      .data(display)
       .enter()
       .append("li")
         .classed("list-group-item",true)
@@ -68,13 +93,9 @@ build = (data)->
 
     media_li 
       .each (d,i)->
-        dates = _.map(d.x, (v,i,l) -> parseDate v ) 
-        calls = _.map(d.y, (v,i,l) -> v-l[i-1]?=0 )  
-        points = _.zip(dates,calls)
-        all_states.add points
 
-        x.domain d3.extent dates 
-        y.domain d3.extent calls  
+        x.domain d3.extent d.dates 
+        y.domain d3.extent d.calls  
 
         media = d3.select @
 
@@ -87,66 +108,31 @@ build = (data)->
             .append('g')
               .attr('transform', 'translate(0, 2)');
 
-        sparkline svg, points
+        sparkline svg, d.points()
         
         body = media .append('div')
           .classed("media-body",true)
         body.append('h4')
           .classed("media-heading",true)
-          .text( (d,i)-> d.name )
+          .text (d,i)->d.name
         body.append('p')
           .text (d,i)-> 
-            "TOTAL CALLS: "+ _.last(d.y)  
+            lastdate=_.last(d.dates)
+            "There have been " + d.sum() + " balance checks by the end of " + DateUtil(lastdate,"M/D")
         body.append('p')
-          .text (d,i)-> 
-            sum= _.last(d.y)
-            "DAILY AVG: " +  ExtMath.truncate sum / d.y.length,2
-        body.append('p')
-          .text (d,i)-> 
-            lasttwo=_.last(calls,2)
-            diff= lasttwo[1]? - lasttwo[0]?=0
-            "CHG: " +  diff
-
-    total_li = d3.select("#total")
-      .append("li")
-        .classed("list-group-item",true)
-      .append("div")
-        .classed("media",true)
-      
-    x.domain d3.extent all_states.dates 
-    y.domain d3.extent all_states.calls  
-
-    svg = total_li .append("div")
-      .classed("pull-left",true)
-      .append('svg')
-        .classed("media-object",true)
-        .attr('width', width)
-        .attr('height', height)
-        .append('g')
-          .attr('transform', 'translate(0, 2)');
-      
-    full_days = all_states.points()
-    sparkline svg, full_days 
-    
-    sum=_.reduce(all_states.calls, _sum) 
-    
-    body = total_li.append('div')
-      .classed("media-body",true)
-    body.append('h4')
-      .classed("media-heading",true)
-      .text( "ALL" )
-    body.append('p')
-      .text (d,i)->
-        "TOTAL CALLS: "+ sum
-    body.append('p')
-      .text (d,i)-> 
-        "DAILY AVG: " +  ExtMath.truncate sum / all_states.calls.length,2
-    body.append('p')
-      .text (d,i)-> 
-        lasttwo=_.last(all_states.calls,2)
-        diff= lasttwo[1]? - lasttwo[0]?=0
-        "CHG: " +  diff
-
+          .text (d,i)-> "The average checks per day is " +  d.avg()
+        body.append('p').text (d,i)->
+            lastcalls = _.last(d.calls,2)
+            lastdates = _.last(d.dates,2)
+            diff= lastcalls[1] - lastcalls[0]
+            sentence = ["","","","on","","than on",""]
+            sentence[0] = if (Math.abs diff) is 1 then "There was" else "There were"
+            sentence[1] = Math.abs diff
+            sentence[2] = if diff > 0 then "more" else "fewer" 
+            sentence[4] = DateUtil lastdates[1],"M/D"
+            sentence[6] = DateUtil lastdates[0],"M/D"
+            sentence.join " "
+            
 $(document).ready ->
   data_url ='http://whateverorigin.org/get?url=' + encodeURIComponent('https://plot.ly/~lippytak/184/balance-metrics-checks.json') + '&callback=?' 
   $.getJSON data_url ,build
