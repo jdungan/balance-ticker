@@ -41,15 +41,17 @@ class Summary
     @name =""  
     @calls=[]
     @dates=[]
-  sum : ->
+  sum : (days)->
+    days ?= @calls
     if @calls.length > 0
-      _.reduce @calls,(memo, num) -> memo + num
+      _.reduce days,(memo, num) -> memo + num
     else
       0
   max : -> _.reduce @calls,(m,n)-> if n>m then n else m
   min : -> _.reduce @calls,(m,n)-> if n<m then n else m
-  avg : -> ExtMath.truncate @sum() / @calls.length,1
-    
+  avg : (moving)->
+    pastdays = _.last(@calls,moving)
+    ExtMath.truncate @sum(pastdays) / pastdays.length,1
   add: (points)->
     iter = (e,i,l)->
       date_pos = _.sortedIndex(@dates,e[0])
@@ -118,9 +120,12 @@ build = (data)->
         body.append('p')
           .text (d,i)-> 
             lastdate=_.last(d.dates)
-            "There have been " + d.sum() + " balance checks by the end of " + DateUtil(lastdate,"M/D")
+            "There have been " + d.sum() + " balance checks since " + DateUtil(lastdate,"M/D") + "."
         body.append('p')
-          .text (d,i)-> "The average checks per day is " +  d.avg()
+          .text (d,i)->
+            tenday = d.avg(10)
+            chk = if tenday is 1 then " check" else " checks"
+            "There is an average of  " + tenday + chk + " per day over the past 10 days."
         body.append('p').text (d,i)->
             lastcalls = _.last(d.calls,2)
             lastdates = _.last(d.dates,2)
@@ -130,7 +135,7 @@ build = (data)->
             sentence[1] = Math.abs diff
             sentence[2] = if diff > 0 then "more" else "fewer" 
             sentence[4] = DateUtil lastdates[1],"M/D"
-            sentence[6] = DateUtil lastdates[0],"M/D"
+            sentence[6] = DateUtil( lastdates[0],"M/D" )+ "."
             sentence.join " "
             
 $(document).ready ->
