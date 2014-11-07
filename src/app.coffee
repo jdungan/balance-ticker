@@ -6,30 +6,34 @@ class ExtMath extends Math
     Math.round(x * scale) / scale
 
 # sparkline adapted from http://www.tnoda.com/blog/2013-12-19
-width = 96
-height = 64
-x = d3.scale.linear().range([0, width - 2])
-y = d3.scale.linear().range([height - 4, 0])
-parseDate = d3.time.format("%Y-%m-%d").parse
+sparkline =
+  width : 96
+  height : 64
 
-line = d3.svg.line()
+x = d3.scale.linear().range([0, sparkline.width - 2])
+y = d3.scale.linear().range([sparkline.height - 4, 0])
+
+sparkline.line = d3.svg.line()
   .interpolate("basis")
   .x( (d) -> x( d[0] ) )
   .y( (d) -> y( d[1] ) )
 
-sparkline = (g, data) ->
-  
-  if data.length > 0
+sparkline.append = (g, d) ->
+  if d.calls.length > 0
+    x.domain d3.extent d.dates 
+    y.domain d3.extent d.calls  
     g.append('path')
-      .datum(data)
+      .datum(d.points())
       .classed('sparkline',true)
-      .attr('d', line)
+      .attr('d', @line)
 
     g.append('circle')
       .classed('sparkcircle',true)
-      .attr('cx', -> x( _.last(data)[0] ) )
-      .attr('cy', -> y( _.last(data)[1] ) )
+      .attr('cx', -> x _.last d.dates)
+      .attr('cy', -> y _.last d.calls)
       .attr('r', 1.5)
+
+parseDate = d3.time.format("%Y-%m-%d").parse
 
 DateUtil = (JSdate,type)->
   if JSdate
@@ -37,10 +41,13 @@ DateUtil = (JSdate,type)->
       when "M/D" then (JSdate.getMonth() + 1) + "/" + JSdate.getDate()
 
 class Summary
-  constructor:->
-    @name =""  
-    @calls=[]
-    @dates=[]
+  constructor:(obj)->
+    if obj
+      {@name,@dates,@calls} = obj
+    @name ?= ""
+    @dates ?= []
+    @calls ?= []
+    
   sum : (days)->
     days ?= @calls
     if @calls.length > 0
@@ -64,24 +71,18 @@ class Summary
   points: ->
     _.zip @dates,@calls
 
-
-
 build = (data)->
     console.log(data)
-    total_calls= new Summary        
+    total_calls= new Summary     
     total_calls.name ="ALL"
-    
     display = _.map(data.contents.data,
       (v,i,l)->
-        dates = _.map(v.x, (v,i,l) -> parseDate v ) 
-        calls = _.map(v.y, (v,i,l) -> v-l[i-1]?=0 )  
-        this_state = new Summary
-        this_state.name = v.name
-        this_state.add(_.zip(dates,calls))              
+        v.dates = _.map(v.x, (v,i,l) -> parseDate v ) 
+        v.calls = _.map(v.y, (v,i,l) -> v-l[i-1]?=0 )  
+        this_state = new Summary(v)
         total_calls.add this_state.points()
         this_state
     )
-    
     display.unshift total_calls
     
     media_li = d3.select('#programs')
@@ -96,46 +97,55 @@ build = (data)->
     media_li 
       .each (d,i)->
 
-        x.domain d3.extent d.dates 
-        y.domain d3.extent d.calls  
-
         media = d3.select @
 
         svg = media.append("div")
           .classed("pull-left",true)
           .append('svg')
             .classed("media-object",true)
-            .attr('width', width)
-            .attr('height', height)
+            .attr('width', sparkline.width)
+            .attr('height', sparkline.height)
             .append('g')
               .attr('transform', 'translate(0, 2)');
 
-        sparkline svg, d.points()
+        sparkline.append svg, d
         
         body = media .append('div')
           .classed("media-body",true)
+
         body.append('h4')
           .classed("media-heading",true)
           .text (d,i)->d.name
+
         body.append('p')
           .text (d,i)-> 
-            lastdate=_.last(d.dates)
-            "There have been " + d.sum() + " balance checks since " + DateUtil(lastdate,"M/D") + "."
+            sentence = ["There were","","balance checks between","","and",""]
+            sentence[1]=d.sum()
+            sentence[3]=DateUtil(_.first(d.dates),"M/D")
+            sentence[5]=DateUtil(_.last(d.dates),"M/D")+"."
+            sentence.join " "
+            
         body.append('p')
           .text (d,i)->
             tenday = d.avg(10)
             chk = if tenday is 1 then " check" else " checks"
             "There is an average of  " + tenday + chk + " per day over the past 10 days."
+
         body.append('p').text (d,i)->
             lastcalls = _.last(d.calls,2)
             lastdates = _.last(d.dates,2)
             diff= lastcalls[1] - lastcalls[0]
-            sentence = ["","","","on","","than on",""]
+            sentence = ["There ...","num","more","checks","on","date","than on","date"]
             sentence[0] = if (Math.abs diff) is 1 then "There was" else "There were"
             sentence[1] = Math.abs diff
-            sentence[2] = if diff > 0 then "more" else "fewer" 
-            sentence[4] = DateUtil lastdates[1],"M/D"
-            sentence[6] = DateUtil( lastdates[0],"M/D" )+ "."
+            sentence[2] = if diff > 0 then "more" else "fewer"
+            sentence[3] = if (Math.abs diff) is 1 then "check" else "checks"
+            sentence[5] = DateUtil lastdates[1],"M/D"
+            sentence[7] = DateUtil( lastdates[0],"M/D" )+ "."
+            if diff is 0
+              sentence[1]="the"
+              sentence[2]="same number of"
+              sentence[6]="and"
             sentence.join " "
             
 $(document).ready ->
