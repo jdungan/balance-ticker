@@ -14,7 +14,7 @@ x = d3.scale.linear().range([0, sparkline.width - 2])
 y = d3.scale.linear().range([sparkline.height - 4, 0])
 
 sparkline.line = d3.svg.line()
-  .interpolate("basis")
+  .interpolate("bundle")
   .x( (d) -> x( d[0] ) )
   .y( (d) -> y( d[1] ) )
 
@@ -83,6 +83,11 @@ build = (data)->
         total_calls.add this_state.points()
         this_state
     )
+    
+    #sort by biggest call increase
+    display = _.sortBy display,(v)->
+      v.calls[v.calls.length-2]-v.calls[v.calls.length-1]
+    
     display.unshift total_calls
     
     media_li = d3.select('#programs')
