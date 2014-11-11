@@ -5,40 +5,40 @@ class ExtMath extends Math
     scale = scales[precision]
     Math.round(x * scale) / scale
 
-# sparkline adapted from http://www.tnoda.com/blog/2013-12-19
-sparkline =
-  width : 96
-  height : 64
-
-x = d3.scale.linear().range([0, sparkline.width - 2])
-y = d3.scale.linear().range([sparkline.height - 4, 0])
-
-sparkline.line = d3.svg.line()
-  .interpolate("bundle")
-  .x( (d) -> x( d[0] ) )
-  .y( (d) -> y( d[1] ) )
-
-sparkline.append = (g, d) ->
-  if d.calls.length > 0
-    x.domain d3.extent d.dates 
-    y.domain d3.extent d.calls  
-    g.append('path')
-      .datum(d.points())
-      .classed('sparkline',true)
-      .attr('d', @line)
-
-    g.append('circle')
-      .classed('sparkcircle',true)
-      .attr('cx', -> x _.last d.dates)
-      .attr('cy', -> y _.last d.calls)
-      .attr('r', 1.5)
-
+# date utilities
 parseDate = d3.time.format("%Y-%m-%d").parse
 
 DateUtil = (JSdate,type)->
   if JSdate
     switch type
       when "M/D" then (JSdate.getMonth() + 1) + "/" + JSdate.getDate()
+
+# sparkline adapted from http://www.tnoda.com/blog/2013-12-19
+class Sparkline
+  width : 96
+  height : 64
+  x : d3.scale.linear().range([0, @::width - 2])
+  y : d3.scale.linear().range([ @::height - 4, 0])
+  constructor: (g,d)->
+    if d.calls.length > 0
+      x = @x.domain d3.extent d.dates 
+      y = @y.domain d3.extent d.calls
+      line = d3.svg.line()
+        .interpolate "basis"
+        .x (d) -> x d[0]
+        .y (d) -> y d[1]
+        
+      g.append('path')
+        .datum(d.points())
+        .classed('sparkline',true)
+        .attr('d', line)
+
+      g.append('circle')
+        .classed('sparkcircle',true)
+        .attr('cx', @x _.last d.dates)
+        .attr('cy', @y _.last d.calls)
+        .attr('r', 1.5)
+      g
 
 class Summary
   constructor:(obj)->
@@ -57,15 +57,15 @@ class Summary
   max : -> _.reduce @calls,(m,n)-> if n>m then n else m
   min : -> _.reduce @calls,(m,n)-> if n<m then n else m
   avg : (moving)->
-    pastdays = _.last(@calls,moving)
-    ExtMath.truncate @sum(pastdays) / pastdays.length,1
+    pastdays = _.last @calls,moving
+    ExtMath.truncate @sum(pastdays) / moving,1
   add: (points)->
     iter = (e,i,l)->
       date_pos = _.sortedIndex(@dates,e[0])
       date = @dates[date_pos] ? 0
       if e[0].valueOf() isnt date.valueOf()
         @dates= _.first(@dates,date_pos).concat  [e[0]] , _.rest(@dates,date_pos)
-        @calls= _.first(@calls,date_pos).concat  [0] , _.rest(@calls,date_pos)
+        @calls= _.first(@calls,date_pos).concat     [0] , _.rest(@calls,date_pos)
       @calls[date_pos]  += e[1]
     _.each points,iter,@
   points: ->
@@ -108,13 +108,14 @@ build = (data)->
           .classed("pull-left",true)
           .append('svg')
             .classed("media-object",true)
-            .attr('width', sparkline.width)
-            .attr('height', sparkline.height)
+            .attr('width', 96)
+            .attr('height', 64)
             .append('g')
               .attr('transform', 'translate(0, 2)');
 
-        sparkline.append svg, d
-        
+        new Sparkline svg, d
+                
+
         body = media .append('div')
           .classed("media-body",true)
 
