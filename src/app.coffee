@@ -75,7 +75,8 @@ build = (data)->
     console.log(data)
     total_calls= new Summary     
     total_calls.name ="ALL"
-    display = _.map(data.contents.data,
+    display = _.map(
+      data,
       (v,i,l)->
         v.dates = _.map(v.x, (v,i,l) -> parseDate v ) 
         v.calls = _.map(v.y, (v,i,l) -> v-l[i-1]?=0 )  
@@ -104,7 +105,7 @@ build = (data)->
 
         media = d3.select @
 
-        svg = media.append("div")
+        g = media.append("div")
           .classed("pull-left",true)
           .append('svg')
             .classed("media-object",true)
@@ -113,15 +114,14 @@ build = (data)->
             .append('g')
               .attr('transform', 'translate(0, 2)');
 
-        new Sparkline svg, d
-                
+        new Sparkline g, d                
 
         body = media .append('div')
           .classed("media-body",true)
 
         body.append('h4')
           .classed("media-heading",true)
-          .text (d,i)->d.name
+          .text d.name
 
         body.append('p')
           .text (d,i)-> 
@@ -135,7 +135,7 @@ build = (data)->
           .text (d,i)->
             tenday = d.avg(10)
             chk = if tenday is 1 then " check" else " checks"
-            "There is an average of  " + tenday + chk + " per day over the past 10 days."
+            "There was an average of  " + tenday + chk + " per day over the past 10 days."
 
         body.append('p').text (d,i)->
             lastcalls = _.last(d.calls,2)
@@ -155,6 +155,13 @@ build = (data)->
             sentence.join " "
             
 $(document).ready ->
-  data_url ='http://whateverorigin.org/get?url=' + encodeURIComponent('https://plot.ly/~lippytak/184/balance-metrics-checks.json') + '&callback=?' 
-  $.getJSON data_url ,build
-
+    data_url ='http://whateverorigin.org/get?url=' + encodeURIComponent('https://plot.ly/~lippytak/184/balance-metrics-checks.json') + '&callback=?' 
+    $.getJSON(data_url)
+       .done (data)->
+         if data.contents.data
+           build data.contents.data
+           d3.select('#ticker_msg').text('')
+         else
+           d3.select('#ticker_msg').text('Sorry, the data is not available.')
+       .fail (err) ->
+          d3.select('#ticker_msg').text('Sorry, the request failed.')
