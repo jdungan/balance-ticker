@@ -154,14 +154,22 @@ build = (data)->
               sentence[6]="and"
             sentence.join " "
             
-$(document).ready ->
-    data_url ='http://whateverorigin.org/get?url=' + encodeURIComponent('https://plot.ly/~lippytak/184/balance-metrics-checks.json') + '&callback=?' 
-    $.getJSON(data_url)
-       .done (data)->
-         if data.contents.data
-           build data.contents.data
-           d3.select('#ticker_msg').text('')
-         else
-           d3.select('#ticker_msg').text('Sorry, the data is not available.')
-       .fail (err) ->
-          d3.select('#ticker_msg').text('Sorry, the request failed.')
+$(document).ready ->      
+    data_url ='https://plot.ly/~lippytak/184/balance-metrics-checks.json'
+    err_msg = ->
+      d3.select('#ticker_msg').text('Sorry, the request failed.')
+
+    d3.select('#ticker_msg').text('Retrieving data ... ')
+    
+    $.ajax {
+      dataType: "json"
+      url: data_url
+    }
+    .done (data)->
+      if data.data
+        d3.select('#ticker_msg').text('Sorted by largest daily increase')
+        build data.data
+      else
+        err_msg()
+    .fail (err) ->
+      err_msg()
