@@ -16,7 +16,7 @@ DateUtil = (JSdate,type)->
 # sparkline adapted from http://www.tnoda.com/blog/2013-12-19
 class Sparkline
   width : 96
-  height : 64
+  height : 32
   x : d3.scale.linear().range([0, @::width - 2])
   y : d3.scale.linear().range([ @::height - 4, 0])
   constructor: (g,d)->
@@ -39,7 +39,74 @@ class Sparkline
         .attr('cy', @y _.last d.calls)
         .attr('r', 1.5)
       g
+      
+class Weekday
+  width : 96,
+  height : 32,
+  labels : ['S','M','T','W','T','F','S'],
+  x : d3.scale.ordinal().domain([0,1,2,3,4,5,6]).rangeRoundBands([0, @::width], .2),
+  y : d3.scale.linear().range([ @::height , 0]),
+  xAxis : d3.svg.axis().scale(@::x).orient("bottom"),
+  
+  constructor: (g,d)->
+    days = [0,0,0,0,0,0,0]
+    _.map d.dates,(v,i,l)-> days[v.getDay()] += d.calls[i]
+    max_day = _.reduce days,(m,n)-> if n>m then n else m
+    @y.domain([0,max_day])
+    
+    c = @ #context
 
+    bar = g.selectAll("g")
+      .data(days)
+      .enter().append("g")
+      .attr("transform", (d,i)-> "translate(" + c.x(i) + ",0)")
+
+    bar.append("rect")
+      .classed("bar",true)
+      .attr("y", (d,i) -> c.y(d))
+      .attr("height", (d) -> c.height - c.y(d))
+      .attr("width", @x.rangeBand())
+
+    ticks = g.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + @height + ")")
+      .call(@xAxis);
+   
+    ticks.selectAll('text')
+     .text((d,i)->c.labels[i])
+
+class Month
+  width : 96,
+  height : 32,
+  labels : Array.apply(null,Array(31)).map((v,i)->i+1),
+  x : d3.scale.ordinal().domain(@::labels).rangeRoundBands([0, @::width], .4),
+  y : d3.scale.linear().range([ @::height , 0]),
+  xAxis : d3.svg.axis().scale(@::x).orient("bottom").tickValues([1,7,14,21,31]),
+  
+  constructor: (g,d)->
+    days = Array.apply(null,Array(31)).map(->0)
+    _.map d.dates,(v,i,l)-> days[v.getDate()] += d.calls[i]
+    max_day = _.reduce days,(m,n)-> if n>m then n else m
+    @y.domain([0,max_day])
+    
+    c = @ #context
+
+    bar = g.selectAll("g")
+      .data(days)
+      .enter().append("g")
+      .attr("transform", (d,i)-> "translate(" + c.x(i) + ",0)")
+
+    bar.append("rect")
+      .classed("bar",true)
+      .attr("y", (d,i) -> c.y(d))
+      .attr("height", (d) -> c.height - c.y(d))
+      .attr("width", @x.rangeBand())
+
+    ticks = g.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + @height + ")")
+      .call(@xAxis);
+  
 class Summary
   constructor:(obj)->
     if obj
@@ -74,20 +141,18 @@ class Summary
 build = (data)->
     console.log(data)
     total_calls= new Summary     
-    total_calls.name ="ALL"
-    display = _.map(
-      data,
+    total_calls.name ="All Programs"
+    display = _.map data,
       (v,i,l)->
         v.dates = _.map(v.x, (v,i,l) -> parseDate v ) 
         v.calls = _.map(v.y, (v,i,l) -> v-l[i-1]?=0 )  
         this_state = new Summary(v)
         total_calls.add this_state.points()
         this_state
-    )
     
     #sort by biggest call increase
     display = _.sortBy display,(v)->
-      v.calls[v.calls.length-2]-v.calls[v.calls.length-1]
+        v.calls[v.calls.length-2]-v.calls[v.calls.length-1]
     
     display.unshift total_calls
     
@@ -105,17 +170,30 @@ build = (data)->
 
         media = d3.select @
 
-        g = media.append("div")
+        svg = media.append("div")
           .classed("pull-left",true)
           .append('svg')
             .classed("media-object",true)
-            .attr('width', 96)
-            .attr('height', 64)
-            .append('g')
-              .attr('transform', 'translate(0, 2)');
+            .attr('width', 112)
+            .attr('height', 192)
+        
+        
+        spark = svg.append('g')
+          .attr('transform', 'translate(0, 2)');
+              
+        week = svg.append('g')
+          .attr('transform', 'translate(0, 48)');
 
-        new Sparkline g, d                
+        month= svg.append('g')
+          .attr('transform', 'translate(0, 112)');
+          
 
+        new Sparkline spark, d       
+        
+        new Weekday week, d
+  
+        new Month month, d
+  
         body = media .append('div')
           .classed("media-body",true)
 
@@ -155,21 +233,19 @@ build = (data)->
             sentence.join " "
             
 $(document).ready ->      
-    data_url ='https://plot.ly/~lippytak/184/balance-metrics-checks.json'
-    err_msg = ->
-      d3.select('#ticker_msg').text('Sorry, the request failed.')
-
-    d3.select('#ticker_msg').text('Retrieving data ... ')
+    msg = (text)->
+      d3.select('#ticker_msg').text(text)
+    msg 'Retrieving data ... '
     
     $.ajax {
       dataType: "json"
-      url: data_url
+      url: 'https://plot.ly/~lippytak/184/balance-metrics-checks.json'
     }
     .done (data)->
       if data.data
-        d3.select('#ticker_msg').text('Sorted by largest daily increase')
+        msg 'Sorted by largest daily increase'
         build data.data
       else
-        err_msg()
+        msg 'Sorry, no data retrieved.'
     .fail (err) ->
-      err_msg()
+      msg 'Sorry, the request failed.'
